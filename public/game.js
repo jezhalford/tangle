@@ -1,101 +1,210 @@
-$(document).ready(function(){
+var d = {
+    'NORTH' : 'NORTH',
+    'EAST'  : 'EAST',
+    'SOUTH' : 'SOUTH',
+    'WEST'  : 'WEST'
+};
 
-    var track = [];
+var board = {
+    'height' : 600,
+    'width'  : 1000
+};
 
-    var d = {
-        'NORTH' : 'NORTH',
-        'EAST'  : 'EAST',
-        'SOUTH' : 'SOUTH',
-        'WEST'  : 'WEST'
-    };
+var growBy = 5;
 
-    var interval = 41;
-    var growBy = 10;
+var timer = null;
 
-    var currentDirection = d.NORTH;
-    var currentPosition = {
-        'x' : 500,
-        'y' : 600,
+var createPlayer = function(colour, initialDirection) {
+
+    var templatePosition = {
+        'x' : 0,
+        'y' : 300,
         'toString' : function() { return '[' + this.x + ',' + this.y + ']';},
         'equals' : function(t) { return this.x == t.x && this.y == t.y;}
     };
 
-    var canvas = $('#play')[0].getContext('2d');
-
-    var getNextPosition = function() {
-        var newPosition = $.extend({}, currentPosition);
-
-        if(currentDirection == d.NORTH) {
-            newPosition.y = currentPosition.y - growBy;
+    var templatePlayer = {
+        'track' : [],
+        'interval' : 250,
+        'currentDirection' : undefined,
+        'colour' : '#ff0000',
+        'currentPosition' : undefined,
+        'toString' : function() {
+            return this.colour + ' heading ' + this.currentDirection + ' from ' + this.currentPosition.toString();
         }
-        else if(currentDirection == d.SOUTH) {
-            newPosition.y = currentPosition.y + growBy;
-        }
-        else if(currentDirection == d.EAST) {
-            newPosition.x = currentPosition.x + growBy;
-        }
-        else if(currentDirection == d.WEST) {
-            newPosition.x = currentPosition.x - growBy;
-        }
-        return newPosition;
     };
 
-    var detectTrackCollision = function() {
-        var finalIndex = track.length-1;
-        var testX = track[finalIndex].x;
-        var testY = track[finalIndex].y;
-        $(track).each(function(i){
+    var newPlayer = $.extend({}, templatePlayer);
+    newPlayer.currentPosition = $.extend({}, templatePosition);
+    newPlayer.colour = colour;
 
-            if(i == finalIndex) {
-                return;
-            }
-            else if(testX == this.x && testY == this.y) {
+    if(initialDirection == d.SOUTH) {
+        newPlayer.currentPosition.x = board.width / 2;
+        newPlayer.currentPosition.y = 0;
+        newPlayer.currentDirection = d.SOUTH;
+    }
+    else if(initialDirection == d.WEST) {
+        newPlayer.currentPosition.x = board.width;
+        newPlayer.currentPosition.y = board.height / 2;
+        newPlayer.currentDirection = d.WEST;
+    }
+    else if(initialDirection == d.NORTH) {
+        newPlayer.currentPosition.x = board.width / 2;
+        newPlayer.currentPosition.y = board.height;
+        newPlayer.currentDirection = d.NORTH;
+    }
+    else if(initialDirection == d.EAST) {
+        newPlayer.currentPosition.x = 0;
+        newPlayer.currentPosition.y = board.height / 2;
+        newPlayer.currentDirection = d.EAST;
+    }
+
+    return newPlayer;
+};
+
+var players = [
+    createPlayer('#ff0000', d.NORTH),
+    createPlayer('#0000ff', d.SOUTH)
+];
+
+var getNextPosition = function(player) {
+    var newPosition = $.extend({}, player.currentPosition);
+
+    if(player.currentDirection == d.NORTH) {
+        newPosition.y = player.currentPosition.y - growBy;
+    }
+    else if(player.currentDirection == d.SOUTH) {
+        newPosition.y = player.currentPosition.y + growBy;
+    }
+    else if(player.currentDirection == d.EAST) {
+        newPosition.x = player.currentPosition.x + growBy;
+    }
+    else if(player.currentDirection == d.WEST) {
+        newPosition.x = player.currentPosition.x - growBy;
+    }
+    return newPosition;
+};
+
+var detectOwnTrackCollision = function(player) {
+    var finalIndex = player.track.length-1;
+    var testX = player.track[finalIndex].x;
+    var testY = player.track[finalIndex].y;
+    $(player.track).each(function(i){
+
+        if(i == finalIndex) {
+            return;
+        }
+        else if(testX == this.x && testY == this.y) {
+            clearInterval(timer);
+            console.log('self hit: ' + player.toString());
+        }
+    });
+};
+
+var detectWallCollision = function(player) {
+    if (
+        player.currentPosition.x < 0 ||
+        player.currentPosition.x > 1000 ||
+        player.currentPosition.y < 0 ||
+        player.currentPosition.y > 600
+        ) {
+        clearInterval(timer);
+        console.log('wall hit: ' + player.toString());
+    }
+};
+
+var detectPlayerCollision = function(players) {
+
+    var combinedTrack = [];
+
+    var heads = [];
+
+    $(players).each(function() {
+        var last = this.track.pop();
+        combinedTrack = combinedTrack.concat(this.track);
+        heads.push(last);
+        this.track.push(last);
+    });
+
+    $(combinedTrack).each(function() {
+        var test = this;
+        $(heads).each(function(i) {
+            if(this.equals(test)) {
                 clearInterval(timer);
-                console.log('self hit');
+                console.log('player collision');
+                console.log('player ' + players[i].colour + ' loses');
             }
         });
-    };
+    });
 
-    var detectWallCollision = function() {
-        if (
-            currentPosition.x < 0 ||
-            currentPosition.x > 1000 ||
-            currentPosition.y < 0 ||
-            currentPosition.y > 600
-            ) {
-            clearInterval(timer);
-            console.log('wall hit');
+};
+
+
+$(document).ready(function(){
+
+    var canvas = $('#play')[0].getContext('2d');
+
+    var tick = function() {
+        $(players).each(function() {
+            this.track.push(this.currentPosition);
+            canvas.strokeStyle = this.colour;
+            canvas.beginPath();
+            canvas.moveTo(this.currentPosition.x, this.currentPosition.y);
+            this.currentPosition = getNextPosition(this);
+            canvas.lineTo(this.currentPosition.x, this.currentPosition.y);
+            canvas.stroke();
+            detectOwnTrackCollision(this);
+            detectWallCollision(this);
+        });
+        detectPlayerCollision(players);
+/*
+        if(Math.random() > 0.9) {
+            var seed = parseInt(Math.random() * 4 + 1);
+            if(seed == 1 && players[1].currentDirection != d.SOUTH) {
+                players[1].currentDirection = d.NORTH;
+            }
+            else if(seed == 2 && players[1].currentDirection != d.NORTH) {
+                players[1].currentDirection = d.SOUTH;
+            }
+            else if(seed == 3 && players[1].currentDirection != d.WEST) {
+                players[1].currentDirection = d.EAST;
+            }
+            else if(seed == 4 && players[1].currentDirection != d.EAST) {
+                players[1].currentDirection = d.WEST;
+            }
         }
-    };
-
-    var draw = function() {
-        track.push(currentPosition);
-        canvas.strokeStyle = '#ff0000';
-        canvas.beginPath();
-        canvas.moveTo(currentPosition.x, currentPosition.y);
-        currentPosition = getNextPosition();
-        canvas.lineTo(currentPosition.x, currentPosition.y);
-        canvas.stroke();
-        detectTrackCollision();
-        detectWallCollision();
+        */
     };
 
     // detect key presses
     $(document).keydown(function(e){
-        if(e.keyCode == 37 && currentDirection != d.EAST) {
-            currentDirection = d.WEST;
+        if(e.keyCode == 37 && players[0].currentDirection != d.EAST) {
+            players[0].currentDirection = d.WEST;
         }
-        if(e.keyCode == 38 && currentDirection != d.SOUTH) {
-            currentDirection = d.NORTH;
+        if(e.keyCode == 38 && players[0].currentDirection != d.SOUTH) {
+            players[0].currentDirection = d.NORTH;
         }
-        if(e.keyCode == 39 && currentDirection != d.WEST) {
-            currentDirection = d.EAST;
+        if(e.keyCode == 39 && players[0].currentDirection != d.WEST) {
+            players[0].currentDirection = d.EAST;
         }
-        if(e.keyCode == 40 && currentDirection != d.NORTH) {
-            currentDirection = d.SOUTH;
+        if(e.keyCode == 40 && players[0].currentDirection != d.NORTH) {
+            players[0].currentDirection = d.SOUTH;
+        }
+
+        if(e.keyCode == 65 && players[1].currentDirection != d.EAST) {
+            players[1].currentDirection = d.WEST;
+        }
+        if(e.keyCode == 87 && players[1].currentDirection != d.SOUTH) {
+            players[1].currentDirection = d.NORTH;
+        }
+        if(e.keyCode == 68 && players[1].currentDirection != d.WEST) {
+            players[1].currentDirection = d.EAST;
+        }
+        if(e.keyCode == 83 && players[1].currentDirection != d.NORTH) {
+            players[1].currentDirection = d.SOUTH;
         }
     });
 
-    var timer = setInterval(draw, interval);
+    timer = setInterval(tick, 50);
 
 });
